@@ -1,0 +1,13 @@
+services:
+  commonground:
+    build: .
+    ports:
+      - '8080:8080'
+    volumes:
+      - commonground-data:/app/data
+    environment:
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}'
+      SECURE_COOKIES: '${SECURE_COOKIES:-false}'
+    restart: unless-stopped
+volumes:
+  commonground-data:

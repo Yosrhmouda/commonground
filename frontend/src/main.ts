@@ -1,0 +1,8 @@
+import { bootstrapApplication } from '@angular/platform-browser';
+import { provideHttpClient } from '@angular/common/http';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { AppComponent } from './app/app.component';
+
+bootstrapApplication(AppComponent, {
+  providers: [provideHttpClient(), provideZonelessChangeDetection()]
+}).catch(error => console.error('CommonGround could not start', error));

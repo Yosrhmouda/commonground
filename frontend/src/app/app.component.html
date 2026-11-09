@@ -1,0 +1,101 @@
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="CommonGround home"><span class="brand-mark"></span><span>common<span class="brand-light">ground</span><i>.</i></span></a>
+  <span class="nav-caption">SMALL ACTIONS. SHARED PLACES.</span>
+  <nav aria-label="Main navigation">
+    <button [class.active]="mode() === 'all'" (click)="navigate('all')"><span>⌖</span> Explore places</button>
+    <button [class.active]="mode() === 'mine'" (click)="navigate('mine')"><span>♡</span> My activity <b class="counter">{{ activityCount() }}</b></button>
+    <button (click)="show('help')"><span>?</span> How it works</button>
+  </nav>
+  <div class="sidebar-bottom"><div class="invite"><div class="spark">✳</div><h3>Your corner of the world.<br>Our common ground.</h3><p>Every street, park and shoreline deserves a little care.</p><button class="secondary" (click)="show('report')">Report a place ↗</button></div><p class="session-label"><span class="session-avatar">CG</span> Your community space<br><small>Browser session · no account needed</small></p></div>
+</aside>
+<main>
+  <header class="topbar"><div class="world"><span>◎</span><div><small>A GLOBAL COMMUNITY</small><b>Local action. Everywhere.</b></div></div><div class="header-actions"><button class="icon-button" aria-label="Refresh places" (click)="refresh()" [disabled]="loading()">↻</button><button class="primary" (click)="show('report')">＋ Report a place</button></div></header>
+  <div class="content">
+    <section class="hero"><div class="hero-copy"><div class="eyebrow"><span class="green-dot"></span> BETTER TOGETHER, WHEREVER YOU ARE</div><h1>A better world.<br>One place at a time.</h1><p>Spot a place that needs care? Bring your neighbors together and turn a small action into a visible change.</p><div class="hero-actions"><button class="primary" (click)="show('report')">＋ Report a place</button><button class="text-button" (click)="navigate('all')">Find a cleanup ↓</button></div></div><div class="hero-image" role="img" aria-label="Volunteers working together"><div class="photo-caption"><span>✳</span><div><b>Good people. Common ground.</b><small>Big change starts close to home.</small></div></div></div></section>
+    <section id="feed" class="feed">
+      <div class="section-heading"><div><span class="eyebrow">FROM SPOTTING IT TO SORTING IT</span><h2>{{ mode() === 'all' ? 'Places that need a hand' : 'My activity' }}</h2><p>{{ mode() === 'all' ? 'Find a place. Join a team. Make a difference.' : 'Your reports, cleanups and participation in one place.' }}</p></div><button class="secondary" (click)="refresh()" [disabled]="loading()">↻ Refresh</button></div>
+      <div class="session-note">Your reports are shared with this app’s visitors. My activity is linked to this browser; clearing cookies resets your access.</div>
+      <div class="search-row"><label>Find a place<input type="search" placeholder="Search a place, street or city…" [value]="query()" (input)="query.set(inputValue($event))"></label><label>Country<select [value]="countryFilter()" (change)="countryFilter.set(inputValue($event))"><option value="">Anywhere in the world</option>@for (country of countries; track country.code) {<option [value]="country.code">{{country.name}}</option>}</select></label></div>
+      <div class="filters" aria-label="Filter by cleanup status">@for (option of statusOptions; track option.key) {<button [class.selected]="stage()===option.key" [attr.aria-pressed]="stage()===option.key" (click)="stage.set(option.key)">{{option.label}}</button>}</div>
+      @if (error()) {<div class="error-banner" role="alert">{{error()}} <button (click)="refresh()">Try again</button></div>}
+      @if (loading() && !places().length) {<div class="empty" role="status"><span class="spinner"></span><p>Finding places that need a hand…</p></div>}
+      @else {
+      <div class="place-grid">
+        @for (place of visible(); track place.id) {
+          <article class="place-card"><div class="card-photo">
+            @if (heroMedia(place).type.startsWith('video/')) {<video [src]="'/api/media/'+heroMedia(place).id" controls playsinline preload="metadata" aria-label="Video of the place"></video>}
+            @else {<img [src]="'/api/media/'+heroMedia(place).id" [alt]="place.title" loading="lazy">}
+            <span class="status-badge" [class.organized]="place.stage==='organized'" [class.cleaned]="place.stage==='cleaned'">{{status(place)}}</span>
+            @if (place.live?.active) {<span class="live-badge">● LIVE NOW</span>}
+            <span class="media-count">{{place.before.length}} before · {{place.after.length}} after</span></div>
+            <div class="card-body"><div class="location-line">⌖ {{place.city}}, {{countryName(place.country)}}</div><h3>{{place.title}}</h3><p class="card-description">{{place.description}}</p>
+            @if(place.stage==='organized') {<div class="schedule">▦ {{time(place)}}</div><p class="muted small">Your time · {{place.participants}} joined · Goal: {{place.target}}</p>}
+            <div class="card-meta"><button class="like" [class.liked]="place.liked" [attr.aria-pressed]="place.liked" [attr.aria-label]="(place.liked?'Unlike ':'Like ')+place.title" [disabled]="busyId()===place.id" (click)="react(place,'like')"><span>{{place.liked?'♥':'♡'}}</span> {{place.likes}} Like</button>@if(place.joined){<span class="joined">✓ You joined</span>}@if(place.mine){<span class="joined">Your report</span>}</div>
+            <button class="card-action" (click)="show('detail',place)">{{place.stage==='reported'?'View place & organize':place.stage==='organized'?'View cleanup':'See before & after'}} <span>→</span></button></div>
+          </article>
+        } @empty {
+          <div class="empty"><span class="empty-spark">✳</span><h3>{{places().length?'No matching places.':'Be the first to make a difference.'}}</h3><p>{{mode()==='mine'?'Your reports and joined cleanups will appear here.':'Report a place with photos or videos, then bring people together.'}}</p><button class="primary" (click)="show('report')">＋ Report a place</button>@if(query()||countryFilter()||stage()!=='all'){<button class="text-button" (click)="clearFilters()">Clear filters</button>}</div>
+        }
+      </div>}
+    </section><footer>CommonGround · A global community taking local action.</footer>
+  </div>
+</main>
+<nav class="mobile-nav" aria-label="Mobile navigation"><button [class.active]="mode()==='all'" (click)="navigate('all')">⌖<span>Explore</span></button><button (click)="show('report')">＋<span>Report</span></button><button [class.active]="mode()==='mine'" (click)="navigate('mine')">♡<span>My activity</span></button><button (click)="show('help')">?<span>Help</span></button></nav>
+<dialog #dialog aria-labelledby="panel-title" (cancel)="close($event)">
+  <button class="close" aria-label="Close dialog" [disabled]="busy()" (click)="close()">×</button>
+  @if(panel()==='detail') {
+    @if(selected(); as place) {
+      <button class="back" (click)="close()">← Back to places</button><h2 id="panel-title">{{place.title}}</h2><p class="muted">⌖ {{place.location}}, {{place.city}}, {{countryName(place.country)}}</p>
+      <div class="steps"><span class="done">✓ Reported</span><span [class.done]="place.stage!=='reported'">2 Cleanup planned</span><span [class.done]="place.stage==='cleaned'">3 Result shared</span></div>
+      @if(place.live?.active){<div class="live-panel"><span class="live-title">● LIVE NOW</span><p>Marked live by the organizer. Opens the external video platform.</p><a class="watch-live" [href]="place.live?.url" target="_blank" rel="noopener noreferrer">▶ Watch livestream ↗</a></div>}
+      <p class="detail-description">{{place.description}}</p>
+      @if(place.stage==='reported'){<button class="primary full" (click)="show('cleanup',place)">Organize a cleanup here →</button><p class="muted small">Anyone can organize. Choose a date, time zone and meeting point.</p>}
+      @if(place.stage==='organized'){
+        <div class="cleanup-summary"><b>▦ {{time(place)}} · your time</b><p>At the cleanup: {{time(place,true)}} ({{place.timeZone}})</p><p>Organized by {{place.organizerName}}<br>{{place.participants}} joined · Goal: {{place.target}} volunteers</p><b>Meeting point & equipment</b><p>{{place.supplies}}</p></div>
+        <button class="primary full" [disabled]="busyId()===place.id" (click)="react(place,'join')">{{place.joined?'✓ Joined — cancel participation':'Join this cleanup'}}</button>
+        <div class="secondary-actions">@if(place.joined||place.organizerMine){<button class="secondary" (click)="show('after',place)">Share the result</button>}@if(place.organizerMine){<button class="secondary" (click)="show('live',place)">{{place.live?.active?'Manage livestream':'Add livestream'}}</button>}</div>
+      }
+      @if(place.stage==='cleaned'){<p class="info">A participant shared this result. It has not been independently verified.</p>}
+      <h3 class="gallery-title">Before cleaning</h3><app-media-gallery [items]="place.before" label="Before cleaning"/>
+      @if(place.after.length){<h3 class="gallery-title">After cleaning</h3><app-media-gallery [items]="place.after" label="After cleaning"/><p class="detail-description">{{place.result}}</p>}
+      <div class="secondary-actions">@if(place.stage==='cleaned'&&(place.joined||place.organizerMine)){<button class="secondary" (click)="show('after',place)">Add more result photos / videos</button>}@if(place.mine){<button class="secondary" (click)="show('edit',place)">Edit your report</button>}</div>
+    }
+  } @else if(panel()==='help') {
+    <h2 id="panel-title">Small steps. Real change.</h2><div class="help-step"><span>1</span><div><h3>Report a place</h3><p>Add its country, city, address and photos or videos so neighbors can find it.</p></div></div><div class="help-step"><span>2</span><div><h3>Organize or join</h3><p>Set a date in the cleanup’s time zone. Agree on a meeting point, supplies and waste collection.</p></div></div><div class="help-step"><span>3</span><div><h3>Show the change</h3><p>Participants share after photos or videos on the same place page.</p></div></div><p class="info"><b>Your activity stays with this browser.</b> Reports and media are stored on the server. Clearing cookies or using another device starts a new identity; account recovery is not included.</p><p class="muted small">The organizer can link an external livestream. Results are participant-declared. Do not publish private information or film identifiable people without consent. Hazardous waste needs a qualified service.</p>
+  } @else {
+    <button class="back" [disabled]="busy()" (click)="back()">← {{selected()?'Back to place':'Back to places'}}</button>
+    <div class="eyebrow">{{panel()==='report'?'STEP 1 · REPORT A PLACE':panel()==='cleanup'?'STEP 2 · BRING PEOPLE TOGETHER':panel()==='after'?'STEP 3 · SHOW THE CHANGE':panel()==='live'?'LIVE FROM YOUR COMMUNITY':'YOUR PLACE REPORT'}}</div>
+    <h2 id="panel-title">{{panel()==='report'?'Where can we make a difference?':panel()==='edit'?'Edit your report':panel()==='cleanup'?'Plan a cleanup':panel()==='after'?'Share the result':'Share your livestream'}}</h2>
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      @if(panel()==='report'||panel()==='edit') {
+        @if(draftRestored()){<p class="info">Your text draft has been restored. Select your media again.</p>}
+        <label>Place name<input formControlName="title" maxlength="100" placeholder="e.g. Riverside path near the bridge" [attr.aria-invalid]="invalid('title')"></label>
+        <div class="form-row"><label>Country<select formControlName="country" [attr.aria-invalid]="invalid('country')"><option value="">Choose a country</option>@for(country of countries;track country.code){<option [value]="country.code">{{country.name}}</option>}</select></label><label>City / town<input formControlName="city" maxlength="100" placeholder="City or nearest town" [attr.aria-invalid]="invalid('city')"></label></div>
+        <label>Address or landmark<input formControlName="location" maxlength="180" placeholder="Street, park entrance or public meeting point" [attr.aria-invalid]="invalid('location')"></label>
+        <label>What needs cleaning?<textarea formControlName="description" rows="3" maxlength="1500" placeholder="Describe the waste, access and equipment needed…" [attr.aria-invalid]="invalid('description')"></textarea></label>
+      }
+      @if(panel()==='cleanup') {
+        <label>Your name or group<input formControlName="organizerName" maxlength="100" placeholder="Who is organizing?" [attr.aria-invalid]="invalid('organizerName')"></label>
+        <div class="form-row"><label>Date<input type="date" formControlName="date" [attr.aria-invalid]="invalid('date')"></label><label>Meeting time<input type="time" formControlName="time" [attr.aria-invalid]="invalid('time')"></label></div>
+        <label>Time zone at the cleanup<input formControlName="timeZone" list="time-zones" placeholder="e.g. Europe/Berlin" [attr.aria-invalid]="invalid('timeZone')"><datalist id="time-zones">@for(zone of timeZones;track zone){<option [value]="zone"></option>}</datalist></label><p class="muted small">Defaults to your browser’s time zone. Change this if the cleanup is elsewhere.</p>
+        <label>Volunteer goal<input type="number" formControlName="target" min="1" max="500" [attr.aria-invalid]="invalid('target')"></label>
+        <label>Meeting point & equipment<textarea formControlName="supplies" maxlength="1500" rows="3" placeholder="Where to meet; gloves, bags and tools needed…" [attr.aria-invalid]="invalid('supplies')"></textarea></label>
+        <p class="info">Confirm access and arrange waste collection before the cleanup. Your browser session will manage this event.</p>
+      }
+      @if(panel()==='report'||panel()==='after') {
+        <div class="upload-area"><label for="media-input">Add photos or videos</label><p>Choose up to 15 files, 50 MB total. Add more files with the same button.</p><input id="media-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" multiple (change)="chooseFiles($event)" [disabled]="busy()"><small>JPG, PNG, WebP, GIF, AVIF, MP4, WebM or MOV</small></div>
+        <div class="media-grid previews">@for(preview of previews();track preview.url;let i=$index){<div>@if(preview.file.type.startsWith('video/')){<video [src]="preview.url" controls playsinline></video>}@else{<img [src]="preview.url" alt="Selected image preview">}<button type="button" class="secondary" [disabled]="busy()" (click)="removeFile(i)">Remove file {{i+1}}</button></div>}</div>
+      }
+      @if(panel()==='report'){<p class="info">Reports are visible to this app’s visitors. Avoid private information and identifiable bystanders. Leave hazardous waste to the responsible service.</p>}
+      @if(panel()==='after'){<label>What changed? What remains?<textarea formControlName="result" rows="3" maxlength="1500" placeholder="What did your team clean? Is anything still left?" [attr.aria-invalid]="invalid('result')"></textarea></label><p class="info">The place will be marked “Results shared”, not independently verified as clean.</p>}
+      @if(panel()==='live'){
+        <p>Start a video on your platform, then add its link here.</p><label>Livestream link<input formControlName="url" type="url" placeholder="https://www.youtube.com/live/…" [attr.aria-invalid]="invalid('url')"></label><p class="muted small">YouTube · Facebook · Instagram · TikTok · Twitch · Vimeo</p><label class="checkbox-label"><input type="checkbox" formControlName="consent"> I am authorized to share this stream and the people filmed have consented.</label><p class="info">Viewers open the external platform. CommonGround does not host or automatically verify the video.</p>
+      }
+      @if(formError()){<p class="form-error" role="alert">{{formError()}}</p>}
+      <button type="submit" class="primary full" [disabled]="busy()">{{busy()?'Saving…':panel()==='report'?'Share this place →':panel()==='edit'?'Save changes':panel()==='cleanup'?'Create cleanup →':panel()==='after'?'Share result →':'Save livestream →'}}</button>
+      @if(panel()==='report'){<p class="muted small">Your text is kept as a draft in this browser. Files must be selected again if you close.</p>}
+    </form>
+    @if(panel()==='live' && selected()?.live?.active){<button class="secondary" [disabled]="busy()||!!busyId()" (click)="react(selected()!,'stopLive')">End live status</button>}
+  }
+</dialog>
+@if(notice()){<div class="toast" role="status">{{notice()}}<button aria-label="Dismiss notification" (click)="notice.set('')">×</button></div>}
