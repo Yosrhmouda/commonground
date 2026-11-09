@@ -17,21 +17,27 @@
       <div class="session-note">Your reports are shared with this app’s visitors. My activity is linked to this browser; clearing cookies resets your access.</div>
       <div class="search-row"><label>Find a place<input type="search" placeholder="Search a place, street or city…" [value]="query()" (input)="query.set(inputValue($event))"></label><label>Country<select [value]="countryFilter()" (change)="countryFilter.set(inputValue($event))"><option value="">Anywhere in the world</option>@for (country of countries; track country.code) {<option [value]="country.code">{{country.name}}</option>}</select></label></div>
       <div class="filters" aria-label="Filter by cleanup status">@for (option of statusOptions; track option.key) {<button [class.selected]="stage()===option.key" [attr.aria-pressed]="stage()===option.key" (click)="stage.set(option.key)">{{option.label}}</button>}</div>
+      @if(stage()==='cleaned') {<div class="results-callout"><div><b>Show what your team changed.</b><p>Choose a previous cleanup, select its before media, and upload the after.</p></div><button class="primary" (click)="startResult()">＋ Share a result</button></div>}
       @if (error()) {<div class="error-banner" role="alert">{{error()}} <button (click)="refresh()">Try again</button></div>}
       @if (loading() && !places().length) {<div class="empty" role="status"><span class="spinner"></span><p>Finding places that need a hand…</p></div>}
       @else {
       <div class="place-grid">
         @for (place of visible(); track place.id) {
-          <article class="place-card"><div class="card-photo">
+          <article class="place-card">
+          @if(place.stage==='cleaned' && place.after.length){<div class="card-comparison">@for(side of [{label:'Before',media:place.results.length?place.results[0].before[0]:place.before[0]},{label:'After',media:place.results.length?place.results[0].after[0]:place.after[0]}];track side.label){<div>@if(side.media.type.startsWith('video/')){<video [src]="'/api/media/'+side.media.id" controls playsinline preload="metadata" [attr.aria-label]="side.label+' cleanup video'"></video>}@else{<img [src]="'/api/media/'+side.media.id" [alt]="side.label+' cleaning: '+place.title" loading="lazy">}<span>{{side.label}}</span></div>}</div>}
+          @else {<div class="card-photo">
             @if (heroMedia(place).type.startsWith('video/')) {<video [src]="'/api/media/'+heroMedia(place).id" controls playsinline preload="metadata" aria-label="Video of the place"></video>}
             @else {<img [src]="'/api/media/'+heroMedia(place).id" [alt]="place.title" loading="lazy">}
             <span class="status-badge" [class.organized]="place.stage==='organized'" [class.cleaned]="place.stage==='cleaned'">{{status(place)}}</span>
             @if (place.live?.active) {<span class="live-badge">● LIVE NOW</span>}
-            <span class="media-count">{{place.before.length}} before · {{place.after.length}} after</span></div>
+            <span class="media-count">{{place.before.length}} before · {{place.after.length}} after</span></div>}
             <div class="card-body"><div class="location-line">⌖ {{place.city}}, {{countryName(place.country)}}</div><h3>{{place.title}}</h3><p class="card-description">{{place.description}}</p>
             @if(place.stage==='organized') {<div class="schedule">▦ {{time(place)}}</div><p class="muted small">Your time · {{place.participants}} joined · Goal: {{place.target}}</p>}
             <div class="card-meta"><button class="like" [class.liked]="place.liked" [attr.aria-pressed]="place.liked" [attr.aria-label]="(place.liked?'Unlike ':'Like ')+place.title" [disabled]="busyId()===place.id" (click)="react(place,'like')"><span>{{place.liked?'♥':'♡'}}</span> {{place.likes}} Like</button>@if(place.joined){<span class="joined">✓ You joined</span>}@if(place.mine){<span class="joined">Your report</span>}</div>
-            <button class="card-action" (click)="show('detail',place)">{{place.stage==='reported'?'View place & organize':place.stage==='organized'?'View cleanup':'See before & after'}} <span>→</span></button></div>
+            @if (place.stage === 'reported') {
+              <button type="button" class="primary full" (click)="show('cleanup', place)">Plan a cleanup</button>
+            }
+            <button class="card-action" (click)="show('detail',place)">{{place.stage==='reported'?'View place':place.stage==='organized'?'View cleanup':'See before & after'}} <span>→</span></button></div>
           </article>
         } @empty {
           <div class="empty"><span class="empty-spark">✳</span><h3>{{places().length?'No matching places.':'Be the first to make a difference.'}}</h3><p>{{mode()==='mine'?'Your reports and joined cleanups will appear here.':'Report a place with photos or videos, then bring people together.'}}</p><button class="primary" (click)="show('report')">＋ Report a place</button>@if(query()||countryFilter()||stage()!=='all'){<button class="text-button" (click)="clearFilters()">Clear filters</button>}</div>
@@ -56,8 +62,12 @@
         <div class="secondary-actions">@if(place.joined||place.organizerMine){<button class="secondary" (click)="show('after',place)">Share the result</button>}@if(place.organizerMine){<button class="secondary" (click)="show('live',place)">{{place.live?.active?'Manage livestream':'Add livestream'}}</button>}</div>
       }
       @if(place.stage==='cleaned'){<p class="info">A participant shared this result. It has not been independently verified.</p>}
-      <h3 class="gallery-title">Before cleaning</h3><app-media-gallery [items]="place.before" label="Before cleaning"/>
-      @if(place.after.length){<h3 class="gallery-title">After cleaning</h3><app-media-gallery [items]="place.after" label="After cleaning"/><p class="detail-description">{{place.result}}</p>}
+      @if(place.results.length){
+        <h3 class="gallery-title">The difference we made</h3>
+        @for(result of place.results;track result.id){<article class="result-story"><div class="result-story-heading"><b>Cleanup result</b><time>{{resultDate(result.createdAt)}}</time></div><app-result-comparison [before]="result.before" [after]="result.after"/><p class="detail-description">{{result.description}}</p></article>}
+        <details><summary>View all original report photos / videos</summary><app-media-gallery [items]="place.before" label="Original report"/></details>
+      } @else if(place.after.length){<h3 class="gallery-title">The difference we made</h3><app-result-comparison [before]="place.before" [after]="place.after"/><p class="detail-description">{{place.result}}</p>}
+      @else {<h3 class="gallery-title">Before cleaning</h3><app-media-gallery [items]="place.before" label="Before cleaning"/>}
       <div class="secondary-actions">@if(place.stage==='cleaned'&&(place.joined||place.organizerMine)){<button class="secondary" (click)="show('after',place)">Add more result photos / videos</button>}@if(place.mine){<button class="secondary" (click)="show('edit',place)">Edit your report</button>}</div>
     }
   } @else if(panel()==='help') {
@@ -67,6 +77,12 @@
     <div class="eyebrow">{{panel()==='report'?'STEP 1 · REPORT A PLACE':panel()==='cleanup'?'STEP 2 · BRING PEOPLE TOGETHER':panel()==='after'?'STEP 3 · SHOW THE CHANGE':panel()==='live'?'LIVE FROM YOUR COMMUNITY':'YOUR PLACE REPORT'}}</div>
     <h2 id="panel-title">{{panel()==='report'?'Where can we make a difference?':panel()==='edit'?'Edit your report':panel()==='cleanup'?'Plan a cleanup':panel()==='after'?'Share the result':'Share your livestream'}}</h2>
     <form [formGroup]="form" (ngSubmit)="submit()">
+      @if(panel()==='after') {
+        <label>1. Choose a previous cleanup<select [value]="selectedId() || ''" (change)="selectResultPlace($event)" [disabled]="busy() || previews().length > 0"><option value="" disabled>Select a cleanup</option>@for(event of eligibleResults();track event.id){<option [value]="event.id">{{event.title}} — {{event.city}} · {{event.date}}</option>}</select></label>
+        @if(previews().length){<p class="muted small">To choose a different cleanup, remove the selected after files first.</p>}
+        @if(!eligibleResults().length){<p class="info">No eligible cleanups in this browser yet. Open a planned cleanup and join it, or use the browser where you organized or joined the event.</p>}
+        @if(selected();as event){<fieldset class="before-picker"><legend>2. Select the before photos / videos</legend><p class="muted small">Choose the original views to compare with your after media. {{beforeIds().length}} selected.</p><div class="before-options">@for(item of event.before;track item.id;let i=$index){<div class="before-option" [class.chosen]="beforeIds().includes(item.id)">@if(item.type.startsWith('video/')){<video [src]="'/api/media/'+item.id" controls playsinline preload="metadata" [attr.aria-label]="'Before video '+(i+1)"></video>}@else{<img [src]="'/api/media/'+item.id" [alt]="'Before photo '+(i+1)">}<label class="checkbox-label"><input type="checkbox" [checked]="beforeIds().includes(item.id)" [disabled]="busy()" (change)="toggleBefore(item.id)"> Include before {{i+1}}</label></div>}</div></fieldset>}
+      }
       @if(panel()==='report'||panel()==='edit') {
         @if(draftRestored()){<p class="info">Your text draft has been restored. Select your media again.</p>}
         <label>Place name<input formControlName="title" maxlength="100" placeholder="e.g. Riverside path near the bridge" [attr.aria-invalid]="invalid('title')"></label>
@@ -83,7 +99,7 @@
         <p class="info">Confirm access and arrange waste collection before the cleanup. Your browser session will manage this event.</p>
       }
       @if(panel()==='report'||panel()==='after') {
-        <div class="upload-area"><label for="media-input">Add photos or videos</label><p>Choose up to 15 files, 50 MB total. Add more files with the same button.</p><input id="media-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" multiple (change)="chooseFiles($event)" [disabled]="busy()"><small>JPG, PNG, WebP, GIF, AVIF, MP4, WebM or MOV</small></div>
+        <div class="upload-area"><label for="media-input">{{panel()==='after'?'3. Add after photos or videos':'Add photos or videos'}}</label><p>Choose up to 15 files, 50 MB total. Add more files with the same button.</p><input id="media-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" multiple (change)="chooseFiles($event)" [disabled]="busy()"><small>JPG, PNG, WebP, GIF, AVIF, MP4, WebM or MOV</small></div>
         <div class="media-grid previews">@for(preview of previews();track preview.url;let i=$index){<div>@if(preview.file.type.startsWith('video/')){<video [src]="preview.url" controls playsinline></video>}@else{<img [src]="preview.url" alt="Selected image preview">}<button type="button" class="secondary" [disabled]="busy()" (click)="removeFile(i)">Remove file {{i+1}}</button></div>}</div>
       }
       @if(panel()==='report'){<p class="info">Reports are visible to this app’s visitors. Avoid private information and identifiable bystanders. Leave hazardous waste to the responsible service.</p>}
@@ -92,7 +108,7 @@
         <p>Start a video on your platform, then add its link here.</p><label>Livestream link<input formControlName="url" type="url" placeholder="https://www.youtube.com/live/…" [attr.aria-invalid]="invalid('url')"></label><p class="muted small">YouTube · Facebook · Instagram · TikTok · Twitch · Vimeo</p><label class="checkbox-label"><input type="checkbox" formControlName="consent"> I am authorized to share this stream and the people filmed have consented.</label><p class="info">Viewers open the external platform. CommonGround does not host or automatically verify the video.</p>
       }
       @if(formError()){<p class="form-error" role="alert">{{formError()}}</p>}
-      <button type="submit" class="primary full" [disabled]="busy()">{{busy()?'Saving…':panel()==='report'?'Share this place →':panel()==='edit'?'Save changes':panel()==='cleanup'?'Create cleanup →':panel()==='after'?'Share result →':'Save livestream →'}}</button>
+      <button type="submit" class="primary full" [disabled]="busy() || (panel()==='after' && !selected())">{{busy()?'Saving…':panel()==='report'?'Share this place →':panel()==='edit'?'Save changes':panel()==='cleanup'?'Create cleanup →':panel()==='after'?'Share result →':'Save livestream →'}}</button>
       @if(panel()==='report'){<p class="muted small">Your text is kept as a draft in this browser. Files must be selected again if you close.</p>}
     </form>
     @if(panel()==='live' && selected()?.live?.active){<button class="secondary" [disabled]="busy()||!!busyId()" (click)="react(selected()!,'stopLive')">End live status</button>}

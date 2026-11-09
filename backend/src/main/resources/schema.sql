@@ -47,3 +47,16 @@ CREATE TABLE IF NOT EXISTS participants (
 );
 CREATE INDEX IF NOT EXISTS idx_places_created ON places(created_at);
 CREATE INDEX IF NOT EXISTS idx_media_place ON place_media(place_id);
+
+CREATE TABLE IF NOT EXISTS cleanup_results (
+ id VARCHAR(36) PRIMARY KEY,
+ place_id VARCHAR(36) NOT NULL REFERENCES places(id),
+ description VARCHAR(1500) NOT NULL,
+ created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS result_media (
+ result_id VARCHAR(36) NOT NULL REFERENCES cleanup_results(id),
+ media_id VARCHAR(36) NOT NULL REFERENCES place_media(id),
+ PRIMARY KEY(result_id, media_id)
+);
+CREATE INDEX IF NOT EXISTS idx_results_place ON cleanup_results(place_id);

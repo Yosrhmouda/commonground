@@ -41,19 +41,22 @@ public class MediaStorage {
             }catch(IOException ex){throw new ApiException(500,"Could not read an uploaded file.");}
         }
     }
-    public void store(String place,String phase,List<MultipartFile> files) {
+    public List<String> store(String place,String phase,List<MultipartFile> files) {
+        var ids=new ArrayList<String>();
         validate(files);
         var written=new ArrayList<Path>();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){
             @Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)written.forEach(MediaStorage.this::deleteQuietly);}
         });
         for(var file:files){
-            String id=UUID.randomUUID().toString();Path path=root.resolve(id);written.add(path);
+            String id=UUID.randomUUID().toString();Path path=root.resolve(id);written.add(path);ids.add(id);
             try(var in=file.getInputStream()){Files.copy(in,path);}catch(IOException ex){throw new ApiException(500,"Could not save media. Please try again.");}
             String name=Objects.toString(file.getOriginalFilename(),"media");name=name.substring(0,Math.min(name.length(),150));
             db.update("INSERT INTO place_media(id,place_id,phase,content_type,original_name,size_bytes,created_at) VALUES(?,?,?,?,?,?,?)",id,place,phase,file.getContentType(),name,file.getSize(),System.currentTimeMillis());
         }
+        return ids;
     }
+    public List<Media> forResult(String result,String phase){return db.query("SELECT m.* FROM place_media m JOIN result_media rm ON rm.media_id=m.id WHERE rm.result_id=? AND m.phase=? ORDER BY m.created_at,m.id",(r,n)->new Media(r.getString("id"),r.getString("content_type"),r.getString("original_name"),r.getLong("size_bytes")),result,phase);}
     private void deleteQuietly(Path path){try{Files.deleteIfExists(path);}catch(IOException ignored){}}
     public List<Media> list(String place,String phase){return db.query("SELECT * FROM place_media WHERE place_id=? AND phase=? ORDER BY created_at,id",(r,n)->new Media(r.getString("id"),r.getString("content_type"),r.getString("original_name"),r.getLong("size_bytes")),place,phase);}
     public Download read(String id){

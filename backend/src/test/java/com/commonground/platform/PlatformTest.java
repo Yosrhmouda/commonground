@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PlatformTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate db;
     static final String ORIGIN="http://localhost:4200";
     Cookie visitor() throws Exception {return mvc.perform(get("/api/places")).andReturn().getResponse().getCookie("cg_session");}
     MockMultipartFile photo(){return new MockMultipartFile("media","park.png","image/png",Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="));}
@@ -64,4 +65,43 @@ class PlatformTest {
         postJson(base+"/live",owner,"{\"active\":true,\"url\":\"https://youtube.com.evil.example/live\",\"consent\":true}").andExpect(status().isBadRequest());
         postJson(base+"/live",owner,"{\"active\":true,\"url\":\"https://youtube.com/watch?v=x\",\"consent\":false}").andExpect(status().isBadRequest());
     }
+    @Test void selectedBeforeMediaAndSeparateResultsArePreserved() throws Exception {
+        Cookie owner=visitor();String id=report(owner),other=report(owner),base="/api/places/"+id;
+        postJson(base+"/cleanup",owner,schedule).andExpect(status().isOk());
+        String before=place(id,owner).get("before").get(0).get("id").asText();
+        String foreign=place(other,owner).get("before").get(0).get("id").asText();
+        mvc.perform(multipart(base+"/after").file(photo()).param("result","First view cleared").param("beforeIds",foreign).cookie(owner).header("Origin",ORIGIN)).andExpect(status().isBadRequest());
+        assertEquals("organized",place(id,owner).get("stage").asText());
+        assertEquals(0,place(id,owner).get("after").size());
+        mvc.perform(multipart(base+"/after").file(photo()).param("result","First view cleared").param("beforeIds",before).cookie(owner).header("Origin",ORIGIN)).andExpect(status().isOk());
+        JsonNode first=place(id,owner).get("results").get(0);
+        assertEquals(1,first.get("before").size());assertEquals(before,first.get("before").get(0).get("id").asText());assertEquals(1,first.get("after").size());
+        String firstId=first.get("id").asText();
+        mvc.perform(multipart(base+"/after").file(photo()).param("result","Another update").param("beforeIds",before).cookie(owner).header("Origin",ORIGIN)).andExpect(status().isOk());
+        JsonNode result=place(id,owner);assertEquals(2,result.get("results").size());assertEquals(2,result.get("after").size());
+        boolean found=false;
+        for(JsonNode update:result.get("results"))if(update.get("id").asText().equals(firstId)){found=true;assertEquals("First view cleared",update.get("description").asText());assertEquals(1,update.get("after").size());}
+        assertTrue(found);
+    }
+
+    @Test void previousVersionResultsSurviveNewComparison() throws Exception {
+        Cookie owner=visitor();String id=report(owner),base="/api/places/"+id;
+        postJson(base+"/cleanup",owner,schedule).andExpect(status().isOk());
+        mvc.perform(multipart(base+"/after").file(photo()).param("result","Original result").cookie(owner).header("Origin",ORIGIN)).andExpect(status().isOk());
+        String resultId=place(id,owner).get("results").get(0).get("id").asText();
+        // Simulate data from the previous release, which did not have comparison links.
+        db.update("DELETE FROM result_media WHERE result_id=?",resultId);db.update("DELETE FROM cleanup_results WHERE id=?",resultId);
+        assertEquals(0,place(id,owner).get("results").size());
+        String before=place(id,owner).get("before").get(0).get("id").asText();
+        mvc.perform(multipart(base+"/after").file(photo()).param("result","New comparison").param("beforeIds",before).cookie(owner).header("Origin",ORIGIN)).andExpect(status().isOk());
+        JsonNode results=place(id,owner).get("results");assertEquals(2,results.size());
+        boolean preserved=false;
+        for(JsonNode result:results)if(result.get("description").asText().equals("Original result")){preserved=true;assertEquals(1,result.get("after").size());assertEquals(2,result.get("before").size());}
+        assertTrue(preserved);
+    }
+
+    @Test void missingStaticFilesReturn404InsteadOfServerError() throws Exception {
+        mvc.perform(get("/missing-test-icon.ico")).andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("Resource not found."));
+    }
+
 }

@@ -3,11 +3,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from './api.service';
 import { Place, Stage } from './models';
 import { MediaGalleryComponent } from './media-gallery.component';
+import { ResultComparisonComponent } from './result-comparison.component';
 
 type Panel = 'detail' | 'report' | 'edit' | 'cleanup' | 'after' | 'live' | 'help';
 interface Preview { file: File; url: string; }
 
-@Component({ selector: 'app-root', standalone: true, imports: [ReactiveFormsModule, MediaGalleryComponent], templateUrl: './app.component.html' })
+@Component({ selector: 'app-root', standalone: true, imports: [ReactiveFormsModule, MediaGalleryComponent, ResultComparisonComponent], templateUrl: './app.component.html' })
 export class AppComponent implements OnDestroy {
   readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
@@ -27,6 +28,13 @@ export class AppComponent implements OnDestroy {
   readonly busyId = signal('');
   readonly formError = signal('');
   readonly previews = signal<Preview[]>([]);
+  readonly beforeIds = signal<string[]>([]);
+  readonly eligibleResults = computed(() => this.places().filter(p => p.stage !== 'reported' && (p.joined || p.organizerMine)));
+  startResult() { this.show('after', this.eligibleResults()[0]); }
+  selectResultPlace(event: Event) { const p=this.eligibleResults().find(x=>x.id===this.inputValue(event)); if(p)this.show('after',p); }
+  toggleBefore(id: string) { this.beforeIds.update(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]); }
+  resultDate(timestamp:number) { return new Intl.DateTimeFormat('en-GB',{dateStyle:'medium'}).format(timestamp); }
+
   readonly draftRestored = signal(false);
   readonly statusOptions: { key: Stage | 'all'; label: string }[] = [
     { key: 'all', label: 'All places' }, { key: 'reported', label: 'Needs cleaning' },
@@ -76,7 +84,7 @@ export class AppComponent implements OnDestroy {
   heroMedia(p: Place) { return p.stage === 'cleaned' && p.after.length ? p.after[0] : p.before[0]; }
   show(panel: Panel, p?: Place) {
     if (this.busy()) return;
-    this.panel.set(panel);this.selectedId.set(p?.id || null);this.formError.set('');this.clearFiles();this.draftRestored.set(false);
+    this.panel.set(panel);this.selectedId.set(p?.id || null);this.beforeIds.set(panel==='after' ? (p?.before.map(m=>m.id) || []) : []);this.formError.set('');this.clearFiles();this.draftRestored.set(false);
     const f=this.form;
     for (const c of Object.values(f.controls)) c.clearValidators();
     f.reset({ title:'',location:'',city:'',country:'',description:'',organizerName:'',date:'',time:'09:00',timeZone:this.userTimeZone,target:10,supplies:'',result:'',url:'',consent:false },{emitEvent:false});
@@ -117,6 +125,7 @@ export class AppComponent implements OnDestroy {
   async submit(){
     this.form.markAllAsTouched();if(this.form.invalid){this.formError.set('Please check the highlighted fields.');return;}
     const panel=this.panel(),p=this.selected(),v=this.form.getRawValue();
+    if(panel==='after'&&(!p||!this.beforeIds().length)){this.formError.set('Choose a cleanup and at least one before photo or video.');return;}
     if((panel==='report'||panel==='after')&&!this.previews().length){this.formError.set('Add at least one photo or video.');return;}
     this.busy.set(true);this.formError.set('');
     try {
@@ -127,7 +136,7 @@ export class AppComponent implements OnDestroy {
         this.mode.set('all');this.clearFilters();
       }else if(p&&panel==='edit') await this.api.edit(p.id,{title:v.title,location:v.location,city:v.city,country:v.country,description:v.description});
       else if(p&&panel==='cleanup')await this.api.organize(p.id,{organizerName:v.organizerName,date:v.date,time:v.time,timeZone:v.timeZone,target:Number(v.target),supplies:v.supplies});
-      else if(p&&panel==='after'){data.append('result',v.result);await this.api.result(p.id,data);}
+      else if(p&&panel==='after'){data.append('result',v.result);this.beforeIds().forEach(id=>data.append('beforeIds',id));await this.api.result(p.id,data);}
       else if(p&&panel==='live')await this.api.live(p.id,true,v.url,v.consent);
       else throw Error('Choose a place and try again.');
       const refreshed=await this.refresh();this.busy.set(false);this.close();

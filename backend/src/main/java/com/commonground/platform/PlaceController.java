@@ -22,6 +22,6 @@ public class PlaceController {
     @PostMapping("/places/{id}/join") public Map<String,Boolean> join(@PathVariable String id,@RequestAttribute(VisitorFilter.ACTOR) String actor,@RequestBody Requests.Toggle data){places.participate(id,actor,data.active());return Map.of("ok",true);}
     @PostMapping("/places/{id}/live") public Map<String,Boolean> live(@PathVariable String id,@RequestAttribute(VisitorFilter.ACTOR) String actor,@Valid @RequestBody Requests.Live data){places.live(id,actor,data);return Map.of("ok",true);}
     @PostMapping(value="/places/{id}/after",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String,Boolean> after(@PathVariable String id,@RequestAttribute(VisitorFilter.ACTOR) String actor,@RequestParam String result,@RequestParam("media") List<MultipartFile> files){places.result(id,actor,result,files);return Map.of("ok",true);}
+    public Map<String,Boolean> after(@PathVariable String id,@RequestAttribute(VisitorFilter.ACTOR) String actor,@RequestParam String result,@RequestParam("media") List<MultipartFile> files,@RequestParam(value="beforeIds",required=false) List<String> beforeIds){places.result(id,actor,result,files,beforeIds);return Map.of("ok",true);}
     @GetMapping("/media/{id}") public ResponseEntity<Resource> download(@PathVariable String id){var file=media.read(id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.type())).contentLength(file.size()).header("Cache-Control","private, max-age=3600").body(file.resource());}
 }

@@ -23,6 +23,8 @@ public class ApiErrors {
     ResponseEntity<?> uploadSize() { return ResponseEntity.status(413).body(Map.of("error", "Files must total 50 MB or less.")); }
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class, MissingServletRequestPartException.class})
     ResponseEntity<?> malformed(Exception ex) { return ResponseEntity.badRequest().body(Map.of("error", "Please complete all required fields and choose at least one file.")); }
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    ResponseEntity<?> missingResource() { return ResponseEntity.status(404).body(Map.of("error", "Resource not found.")); }
     @ExceptionHandler(Exception.class)
     ResponseEntity<?> unexpected(Exception ex) {
         LoggerFactory.getLogger(getClass()).error("Request failed", ex);

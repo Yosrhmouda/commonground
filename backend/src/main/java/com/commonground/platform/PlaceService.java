@@ -12,13 +12,15 @@ public class PlaceService {
     private final PlaceRepository repo; private final MediaStorage media;
     public PlaceService(PlaceRepository repo,MediaStorage media){this.repo=repo;this.media=media;}
     public record LiveView(String url,boolean active) {}
+    public record ResultView(String id,String description,long createdAt,List<MediaStorage.Media> before,List<MediaStorage.Media> after) {}
+    private List<ResultView> results(String id){return repo.jdbc().query("SELECT * FROM cleanup_results WHERE place_id=? ORDER BY created_at DESC,id",(r,n)->new ResultView(r.getString("id"),r.getString("description"),r.getLong("created_at"),media.forResult(r.getString("id"),"before"),media.forResult(r.getString("id"),"after")),id);}
     public record View(String id,String title,String location,String city,String country,String description,String stage,
                        String organizerName,String date,String time,String timeZone,Long cleanupAt,Integer target,String supplies,
                        String result,LiveView live,long createdAt,List<MediaStorage.Media> before,List<MediaStorage.Media> after,
-                       int likes,boolean liked,int participants,boolean joined,boolean mine,boolean organizerMine) {}
+                       int likes,boolean liked,int participants,boolean joined,boolean mine,boolean organizerMine,List<ResultView> results) {}
     @Transactional(readOnly=true)
     public List<View> list(String actor){return repo.list().stream().map(p->view(p,actor)).toList();}
-    private View view(PlaceRepository.Place p,String actor){return new View(p.id(),p.title(),p.location(),p.city(),p.country(),p.description(),p.stage(),p.organizerName(),p.date(),p.time(),p.timeZone(),p.cleanupAt(),p.target(),p.supplies(),p.result(),p.liveUrl()==null?null:new LiveView(p.liveUrl(),p.liveActive()),p.createdAt(),media.list(p.id(),"before"),media.list(p.id(),"after"),repo.count("place_likes",p.id()),repo.has("place_likes",p.id(),actor),repo.count("participants",p.id()),repo.has("participants",p.id(),actor),actor.equals(p.ownerId()),actor.equals(p.organizerId()));}
+    private View view(PlaceRepository.Place p,String actor){return new View(p.id(),p.title(),p.location(),p.city(),p.country(),p.description(),p.stage(),p.organizerName(),p.date(),p.time(),p.timeZone(),p.cleanupAt(),p.target(),p.supplies(),p.result(),p.liveUrl()==null?null:new LiveView(p.liveUrl(),p.liveActive()),p.createdAt(),media.list(p.id(),"before"),media.list(p.id(),"after"),repo.count("place_likes",p.id()),repo.has("place_likes",p.id(),actor),repo.count("participants",p.id()),repo.has("participants",p.id(),actor),actor.equals(p.ownerId()),actor.equals(p.organizerId()),results(p.id()));}
     private String required(String value,int max){if(value==null||value.isBlank()||value.length()>max)throw ApiException.badRequest("Complete all fields within the allowed length.");return value.trim();}
     private String country(String value){String c=required(value,2).toUpperCase(Locale.ROOT);if(!Set.of(Locale.getISOCountries()).contains(c))throw ApiException.badRequest("Choose a valid country.");return c;}
     @Transactional
@@ -50,10 +52,27 @@ public class PlaceService {
     @Transactional
     public void participate(String id,String actor,boolean active){var p=repo.get(id,true);if(!p.stage().equals("organized"))throw ApiException.badRequest("This cleanup is not open for participation.");repo.toggle("participants",id,actor,active);}
     @Transactional
-    public void result(String id,String actor,String result,List<MultipartFile> files){
+    public void result(String id,String actor,String result,List<MultipartFile> files,List<String> beforeIds){
         var p=repo.get(id,true);if(!actor.equals(p.organizerId())&&!repo.has("participants",id,actor))throw new ApiException(403,"Join the cleanup before sharing its result.");
         if(p.stage().equals("reported"))throw ApiException.badRequest("Organize a cleanup first.");
-        String text=required(result,1500);media.store(id,"after",files);
+        String text=required(result,1500);
+        var available=media.list(id,"before").stream().map(MediaStorage.Media::id).toList();
+        // Older clients omit beforeIds: associate the original report's complete gallery.
+        var selected=beforeIds==null?available:beforeIds.stream().distinct().toList();
+        if(selected.isEmpty()||selected.size()>15||!available.containsAll(selected))throw ApiException.badRequest("Select 1 to 15 before photos or videos from this cleanup.");
+        // Preserve earlier uploads created before comparison groups were introduced.
+        var oldAfter=media.list(id,"after");
+        if(!oldAfter.isEmpty()&&results(id).isEmpty()){
+            String legacyId=UUID.randomUUID().toString();
+            repo.jdbc().update("INSERT INTO cleanup_results(id,place_id,description,created_at) VALUES(?,?,?,?)",legacyId,id,p.result()==null?"Earlier cleanup result":p.result(),System.currentTimeMillis()-1);
+            for(String mediaId:available)repo.jdbc().update("INSERT INTO result_media(result_id,media_id) VALUES(?,?)",legacyId,mediaId);
+            for(var item:oldAfter)repo.jdbc().update("INSERT INTO result_media(result_id,media_id) VALUES(?,?)",legacyId,item.id());
+        }
+        var uploaded=media.store(id,"after",files);
+        String resultId=UUID.randomUUID().toString();
+        repo.jdbc().update("INSERT INTO cleanup_results(id,place_id,description,created_at) VALUES(?,?,?,?)",resultId,id,text,System.currentTimeMillis());
+        for(String mediaId:selected)repo.jdbc().update("INSERT INTO result_media(result_id,media_id) VALUES(?,?)",resultId,mediaId);
+        for(String mediaId:uploaded)repo.jdbc().update("INSERT INTO result_media(result_id,media_id) VALUES(?,?)",resultId,mediaId);
         repo.jdbc().update("UPDATE places SET stage='cleaned',result_text=?,completed_at=?,live_active=FALSE WHERE id=?",text,System.currentTimeMillis(),id);
     }
     @Transactional
